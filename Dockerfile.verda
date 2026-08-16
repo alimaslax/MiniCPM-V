@@ -34,7 +34,17 @@ RUN git init demo \
 RUN python3 -m pip install --upgrade pip \
     && python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 \
          torch==2.8.0 torchaudio==2.8.0 \
-    && python3 -m pip install -r /app/demo/requirements.txt huggingface_hub
+    # minicpmo-utils pins librosa==0.9.0. The demo's gateway requirements also
+    # request librosa>=0.10.2, which makes one combined pip transaction
+    # unsatisfiable even though the gateway works with the model's supported
+    # stack. Install the runtime first, then only the gateway packages that do
+    # not conflict with it.
+    && python3 -m pip install "minicpmo-utils[all]==1.0.6" huggingface_hub \
+    && python3 -m pip install \
+         "transformers==4.51.0" "accelerate==1.12.0" "safetensors>=0.7.0" \
+         "fastapi>=0.128.0" "uvicorn>=0.40.0" "httpx>=0.28.0" "websockets>=16.0" \
+         python-multipart "markdown>=3.6" "Pygments>=2.18.0" "PyYAML>=6.0" \
+         "soundfile>=0.12.1" "pydantic>=2.11.0" "numpy<2" "tqdm>=4.67.0"
 
 COPY runtime/verda /app/runtime/verda
 RUN chmod +x /app/runtime/verda/entrypoint.sh
