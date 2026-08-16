@@ -1,0 +1,43 @@
+FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
+
+# CUDA 12.8 Torch wheels are required on Blackwell / RTX PRO 6000 GPUs.
+# The model weights deliberately remain on Verda's persistent /data disk.
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app/demo \
+    HF_HOME=/data/.cache/huggingface \
+    MODEL_DIR=/data/models/minicpm-o-4_5 \
+    DEMO_REVISION=50b0865c819c2f0ca24ec7994e05044e5f39d451
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-pip git curl ca-certificates gnupg \
+      ffmpeg libsndfile1 nginx \
+    && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.noarmor.gpg \
+      -o /usr/share/keyrings/tailscale-archive-keyring.gpg \
+    && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/jammy.tailscale-keyring.list \
+      -o /etc/apt/sources.list.d/tailscale.list \
+    && apt-get update && apt-get install -y --no-install-recommends tailscale \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Pin the official full-duplex demo to an immutable revision. It supplies the
+# browser UI and the supported gateway/worker/PyTorch backend protocol.
+RUN git init demo \
+    && cd demo \
+    && git remote add origin https://github.com/OpenBMB/minicpm-o-4_5-pytorch-simple-demo.git \
+    && git fetch --depth 1 origin "$DEMO_REVISION" \
+    && git checkout --detach FETCH_HEAD \
+    && rm -rf .git
+
+RUN python3 -m pip install --upgrade pip \
+    && python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 \
+         torch==2.8.0 torchaudio==2.8.0 \
+    && python3 -m pip install -r /app/demo/requirements.txt huggingface_hub
+
+COPY runtime/verda /app/runtime/verda
+RUN chmod +x /app/runtime/verda/entrypoint.sh
+
+EXPOSE 7860
+ENTRYPOINT ["/app/runtime/verda/entrypoint.sh"]
